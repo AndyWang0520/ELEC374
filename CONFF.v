@@ -1,10 +1,10 @@
 `timescale 1ns/10ps
 
-module ControlFF (
+module CONFF (
     output reg control_output,   // Output to control unit
     input control_input, clear,  // Control input signals
     input [1:0] instruction_register_bits, 
-    input [31:0] bus_mux_output  
+    input [31:0] busMuxOut  
 );
 
     wire instruction_bit_0 = instruction_register_bits[0];
@@ -26,12 +26,12 @@ module ControlFF (
         endcase
     end
 
-    assign nor_gate_output = (bus_mux_output == 32'd0) ? 1'b1 : 1'b0;
+    assign nor_gate_output = (busMuxOut == 32'd0) ? 1'b1 : 1'b0;
     assign or_bit_0 = decoder_output[0] & nor_gate_output;                    
     assign or_nonzero = (!(nor_gate_output)) & decoder_output[1];
   
-    assign or_gte_0 = decoder_output[2] & (!(bus_mux_output[31]));
-    assign or_lt_0 = decoder_output[3] & bus_mux_output[31];
+    assign or_gte_0 = decoder_output[2] & (!(busMuxOut[31]));
+    assign or_lt_0 = decoder_output[3] & busMuxOut[31];
     assign decoder_output_active = or_bit_0 | or_nonzero | or_gte_0 | or_lt_0;
                     
                    
