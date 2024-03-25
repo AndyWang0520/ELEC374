@@ -1,12 +1,11 @@
-
 module datapath(
     // Inputs
-    input PCout, ZHighout, Zlowout, HIout, LOout, InPortout, Cout, CONin,
-    input MDRout, MARin, PCin, MDRin, IRin, Yin, IncPC, Read, Gra,Grb,Grc, Rin,Rout,BAout,
-    input [4:0] operation,
+    input PCout, ZHighout, Zlowout, HIout, LOout, InPortout,outportin, Cout, CONin,
+    input MDRout, MARin, PCin, MDRin, IRin, Yin, IncPC, Read,Write, Gra,Grb,Grc, Rin,Rout,BAout,
     input clk,
-    input [31:0] Mdatain,
-    input clr, HIin, LOin, ZHIin, ZLOin, Cin, branch_flag
+    input clr, HIin, LOin, ZHIin, ZLOin, Cin,
+	 input [31:0] inport_data,
+	 output[31:0] outport_data
 	 
 	 
 );
@@ -28,10 +27,17 @@ module datapath(
 	 wire [63:0] C_data_out, BusMuxIn_MAR;
     wire [31:0] BusMuxOut,IRout_data;
 	 wire [15:0] enableReg,enableRout;
-
+	 wire [31:0] Mdatain;
+	 wire [31:0] r0_out;
+	 wire branch_flag;
+	 wire [8:0] Mar_to_ram;
+	 
+	 Register r0(clr,clk,enableReg[0], BusMuxOut, r0_out);
+	 assign BusMuxIn_R0 = {32{!BAout}} & r0_out; 
 	 
     // Instantiate registers from 0 to 15
-    Register r0(clr, clk, enableReg[0], BusMuxOut, BusMuxIn_R0);
+  
+  
     Register r1(clr, clk, enableReg[1], BusMuxOut, BusMuxIn_R1);
     Register r2(clr, clk, enableReg[2], BusMuxOut, BusMuxIn_R2);
     Register r3(clr, clk, enableReg[3], BusMuxOut, BusMuxIn_R3);
@@ -49,7 +55,7 @@ module datapath(
     Register r15(clr, clk, enableReg[15], BusMuxOut, BusMuxIn_R15);
 
     // Instantiate other registers
-    Register PC(clr, clk, PCin, BusMuxOut, BusMuxIn_PC);
+    PC_reg PC(clr, clk, PCin, BusMuxOut, BusMuxIn_PC);
     Register Y(clr, clk, Yin, BusMuxOut, BusMuxIn_Y);
     Register Z_HI(clr, clk, ZHIin, C_data_out[63:32], BusMuxIn_ZHI);
     Register Z_LO(clr, clk, ZLOin, C_data_out[31:0], BusMuxIn_ZLO);
@@ -62,9 +68,9 @@ module datapath(
     // Instantiate MDRreg module
     MDRreg MDR(clr, clk, MDRin, Mdatain, BusMuxOut, Read, BusMuxIn_MDR);
 	 
-	 marUnit MAR(clr, clk, MARin, BusMuxOut, BusMuxIn_MAR);
+	 mar marUnit(clr, clk, MARin, BusMuxOut, Mar_to_ram);
 	 
-	 CONFF conff(branch_flag, CONin, clr, BusMuxIn_IR, BusMuxOut);
+	 CONFF conff(branch_flag, CONin, clr, IRout_data[20:19], BusMuxOut);
 	 wire[5:0] encoderOut;
 	 
 	 encoder_32_5 regEncoder({8'b0000_0000,Cout,InPortout,MDRout,PCout,Zlowout,ZHighout,LOout,HIout,enableRout}, encoderOut);
@@ -102,15 +108,40 @@ module datapath(
 	Alu the_alu(
 		.Rb(BusMuxOut),
 		.Ry(BusMuxIn_Y),
-		.Opcode(operation),
-		.C_out(C_data_out)
+		.Opcode(IRout_data[31:27]),
+		.C_out(C_data_out),
+		.branch_flag(branch_flag),
+		.IncPC(IncPC),
+		.inputPC(BusMuxIn_PC)
 	);
-	select_encode select(.Gra(Gra),.Grb(Grb),.Grc(Grc),.Rin(Rin),.Rout(Rout),.BAout(BAout),
-								.IR(IRout_data),
-								.Rin_to_reg(enableReg),.Rout_to_reg(enableRout),
-								.C_sign_extended(C_sign_extend)
-								);
+
+	select_encode select(
+		.Gra(Gra),.Grb(Grb),.Grc(Grc),.Rin(Rin),.Rout(Rout),.BAout(BAout),
+		.IR(IRout_data),
+		.Rin_to_reg(enableReg),.Rout_to_reg(enableRout),
+		.C_sign_extended(C_sign_extend)
+		);
 
     // Output assignment
+	 outport outport(
+		.clr(clr),.clk(clk),.outportin(outportin), 
+		.BusMuxOut(BusMuxOut),
+		.outport_data(outport_data)
+		);
+	 
+	 inport inport( 
+		.clr(clr),.clk(clk),
+		.inport_data(inport_data),
+		.BusMuxIn(BusMuxIn_InPort)
+		);
+	ram ram(
+		.address(Mar_to_ram),
+		.clk(clk),
+		.data_out(Mdatain),
+		.read(Read),
+		.write(Write),
+		.data_in(BusMuxOut)
+		);
+	
 
 endmodule
